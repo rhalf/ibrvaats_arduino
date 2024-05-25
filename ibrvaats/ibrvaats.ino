@@ -1,9 +1,6 @@
 #include <ArduinoNmeaParser.h>
 #include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#define SCREEN_WIDTH 128  // OLED display width, in pixels
-#define SCREEN_HEIGHT 64  // OLED display height, in pixels
+#include <U8g2lib.h>
 #include <Arduino.h>
 #if defined(ESP32)
 #include <WiFi.h>
@@ -31,7 +28,8 @@ float floatValue;
 bool signupOK = false;
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+U8G2_SSD1306_128X64_NONAME_1_HW_I2C
+u8g2(U8G2_R0, /*reset=*/U8X8_PIN_NONE, /*clock=*/SCL, /*data=*/SDA);
 
 uint8_t GPS_RXD2 = 16;
 uint8_t GPS_TXD2 = 17;
@@ -116,11 +114,9 @@ void setup() {
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
 
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {  // Address 0x3D for 128x64
-    Serial.println(F("SSD1306 allocation failed"));
-    for (;;)
-      ;
-  }
+  u8g2.begin();
+  u8g2.enableUTF8Print();
+  u8g2.setFont(u8g2_font_profont11_tr);
 
   //create a task that will be executed in the Task1code() function, with priority 1 and executed on core 0
   xTaskCreatePinnedToCore(
@@ -210,26 +206,30 @@ void loopTask2() {
   while (Serial2.available()) {
     parser.encode((char)Serial2.read());
   }
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setCursor(0, 0);
-  display.println("Longitude : " + String(longitude));
-  display.setCursor(0, 11);
-  display.println("Latitude : " + String(latitude));
-  display.setCursor(0, 22);
-  display.println("Speed : " + String(speed));
-  display.setCursor(0, 33);
-  display.println("Course : " + String(course));
-  display.setCursor(0, 44);
-  display.println(date);
-  display.setCursor(0, 55);
-  display.println("Shock : " + String(isShocked));
+
+  u8g2.firstPage();
+  do {
+    u8g2.setCursor(0, 0);
+    u8g2.println("Longitude : " + String(longitude));
+    u8g2.setCursor(0, 11);
+    u8g2.println("Latitude : " + String(latitude));
+    u8g2.setCursor(0, 22);
+    u8g2.println("Speed : " + String(speed));
+    u8g2.setCursor(0, 33);
+    u8g2.println("Course : " + String(course));
+    u8g2.setCursor(0, 44);
+    u8g2.println(date);
+    u8g2.setCursor(0, 55);
+    u8g2.println("Shock : " + String(isShocked));
+  } while (u8g2.nextPage());
+
+
+
 
 
   // display.setCursor(0, 55);
   //display.println("Time : " +  String(time));
 
 
-  display.display();
+  //display.display();
 }

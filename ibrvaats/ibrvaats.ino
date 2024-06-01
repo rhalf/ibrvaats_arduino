@@ -5,18 +5,19 @@
 #if defined(ESP32)
 #include <WiFi.h>
 #include <ESP32Ping.h>
-#elif defined(ESP8266)
-#include <ESP8266WiFi.h>
 #endif
 #include <Firebase_ESP_Client.h>
 #include "addons/TokenHelper.h"
 #include "addons/RTDBHelper.h"
 #define WIFI_SSID "caacbay.net"
 #define WIFI_PASSWORD "g98j3Q1BIF2g"
-#define FIREBASE_PROJECT_ID "esp32firestore-60045"
-#define API_KEY "AIzaSyBDcQ3ZAh0kYynLzRDGT6xC9-Ws6S0cQsU"
+
+
+#define FIREBASE_PROJECT_ID "ibrvaats"
+#define API_KEY "AIzaSyCu8ajKv3lyXT60rlo-1NOuEd4J7KrOY40"
 #define USER_EMAIL "tapicglambert20@gmail.com"
 #define USER_PASSWORD "123456"
+
 
 FirebaseData fbdo;
 FirebaseAuth auth;
@@ -34,6 +35,7 @@ u8g2(U8G2_R0, /*reset=*/U8X8_PIN_NONE, /*clock=*/SCL, /*data=*/SDA);
 uint8_t GPS_RXD2 = 16;
 uint8_t GPS_TXD2 = 17;
 uint8_t PIN_SHOCK = 14;
+const int PIN_BUZZER = 5;
 
 TaskHandle_t Task1;
 TaskHandle_t Task2;
@@ -63,17 +65,8 @@ void onRmcUpdate(nmea::RmcData const rmc) {
 void onGgaUpdate(nmea::GgaData const gga) {
   if (gga.fix_quality != nmea::FixQuality::Invalid) {
     satellite = gga.num_satellites;
-    /*
-    Serial.print(" | HDOP =  ");
-    Serial.print(gga.hdop);
-    Serial.print(" m | Altitude ");
-    Serial.print(gga.altitude);
-    Serial.print(" m | Geoidal Separation ");
-    Serial.print(gga.geoidal_separation);
-    Serial.print(" m");*/
   }
 }
-
 ArduinoNmeaParser parser(onRmcUpdate, nullptr);
 
 void setup() {
@@ -81,6 +74,7 @@ void setup() {
   Serial.begin(9600);
   Serial2.begin(9600);
   pinMode(PIN_SHOCK, INPUT);
+  pinMode(PIN_BUZZER, OUTPUT);
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to Wi-Fi");
@@ -95,14 +89,10 @@ void setup() {
     return;
   }
   Serial.println("Ping succesful.");
-
-
-
   Serial.println();
   Serial.print("Connected with IP: ");
   Serial.println(WiFi.localIP());
   Serial.println();
-
   Serial.printf("Firebase Client v%s\n\n", FIREBASE_CLIENT_VERSION);
 
   config.api_key = API_KEY;
@@ -141,7 +131,6 @@ void setup() {
   delay(500);
 }
 
-//Task1code: Read GPS and Display
 void Task1code(void* pvParameters) {
   while (true) loopTask1();
 }
@@ -156,12 +145,11 @@ void loop() {
 }
 
 void loopTask1() {
-
   while (Serial2.available()) {
     parser.encode((char)Serial2.read());
   }
 
-  String documentPath_ID = "ESP32/"
+  String documentPath_ID = "datas/"
                            ""
                            + Mac_Address;
   FirebaseJson content;
@@ -195,13 +183,12 @@ void loopTask1() {
   if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "satellite")) {
     Serial.printf("ok\n%s\n\n", fbdo.payload().c_str());
   }
-
   delay(10000);
 }
 
 void loopTask2() {
   isShocked = digitalRead(PIN_SHOCK);
-
+  
   //gps
   while (Serial2.available()) {
     parser.encode((char)Serial2.read());
@@ -224,12 +211,10 @@ void loopTask2() {
   } while (u8g2.nextPage());
 
 
-
-
-
-  // display.setCursor(0, 55);
-  //display.println("Time : " +  String(time));
-
-
-  //display.display();
+  if (isShocked == 1) {
+    digitalWrite(PIN_BUZZER, HIGH);
+    loopTask1();
+  } else {
+    digitalWrite(PIN_BUZZER, LOW);
+  }
 }

@@ -143,17 +143,25 @@ void setup() {
 
 void Task1code(void* pvParameters) {
   while (true)
-    if (isShocked == 1) {
-      digitalWrite(PIN_BUZZER, HIGH);
+    if (isShocked) {
+      buzz();
       loopTask1();
-    } else {
-      digitalWrite(PIN_BUZZER, LOW);
+      buzz();
+      buzz();
+      delay(3000);
     }
 }
 
 //Task2code: Read Sensor then Firebase
 void Task2code(void* pvParameters) {
   while (true) loopTask2();
+}
+
+void buzz() {
+  digitalWrite(PIN_BUZZER, HIGH);
+  delay(150);
+  digitalWrite(PIN_BUZZER, LOW);
+  delay(150);
 }
 
 void loop() {
@@ -181,22 +189,20 @@ void loopTask1() {
 
   if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "longitude")) {
   }
-  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "latitude"))
-}
-if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "speed")) {
-}
-if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "course")) {
-}
-if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "shock")) {
-}
-if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "date")) {
-}
-if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "satellite")) {
-}
-if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "ignition")) {
-}
-
-delay(10000);
+  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "latitude")) {
+  }
+  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "speed")) {
+  }
+  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "course")) {
+  }
+  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "shock")) {
+  }
+  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "date")) {
+  }
+  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "satellite")) {
+  }
+  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "ignition")) {
+  }
 }
 
 void loopTask2() {
@@ -211,7 +217,17 @@ void loopTask2() {
   u8g2.firstPage();
   do {
     u8g2.setCursor(0, 0);
-    u8g2.println("Longitude : " + String(longitude));
+    u8g2.println("Speed : " + String(speed));
+    u8g2.setCursor(0, 11);
+    u8g2.println("Ignition : " + String(isIgnition ? "On" : "Off"));
+    u8g2.setCursor(0, 22);
+    u8g2.println("Shock : " + String(isShocked ? "true" : "false"));
+    u8g2.setCursor(0, 33);
+    u8g2.println("Satelllite : " + String(satellite));
+    u8g2.setCursor(0, 44);
+    u8g2.println("Date : " + String(date));
+
+    /*u8g2.println("Longitude : " + String(longitude));
     u8g2.setCursor(0, 11);
     u8g2.println("Latitude : " + String(latitude));
     u8g2.setCursor(0, 22);
@@ -221,6 +237,7 @@ void loopTask2() {
     u8g2.setCursor(0, 44);
     u8g2.println(date);
     u8g2.setCursor(0, 55);
-    u8g2.println("Shock : " + String(isShocked ? "true" : "false"));
+    u8g2.println("Shock : " + String(isShocked ? "true" : "false"));*/
+
   } while (u8g2.nextPage());
 }

@@ -4,6 +4,8 @@
 #include <Arduino.h>
 #if defined(ESP32)
 #include <WiFi.h>
+#include <esp_now.h>
+#include "esp_wifi.h"
 #include <ESP32Ping.h>
 #endif
 #include <Firebase_ESP_Client.h>
@@ -11,13 +13,10 @@
 #include "addons/RTDBHelper.h"
 #define WIFI_SSID "caacbay.net"
 #define WIFI_PASSWORD "g98j3Q1BIF2g"
-
-
 #define FIREBASE_PROJECT_ID "ibrvaats"
 #define API_KEY "AIzaSyCu8ajKv3lyXT60rlo-1NOuEd4J7KrOY40"
 #define USER_EMAIL "tapicglambert20@gmail.com"
 #define USER_PASSWORD "123456"
-
 
 FirebaseData fbdo;
 FirebaseAuth auth;
@@ -32,9 +31,10 @@ bool signupOK = false;
 U8G2_SSD1306_128X64_NONAME_1_HW_I2C
 u8g2(U8G2_R0, /*reset=*/U8X8_PIN_NONE, /*clock=*/SCL, /*data=*/SDA);
 
-uint8_t GPS_RXD2 = 16;
-uint8_t GPS_TXD2 = 17;
+uint8_t GPS_RXD2 = 17;
+uint8_t GPS_TXD2 = 16;
 uint8_t PIN_SHOCK = 14;
+uint8_t PIN_ACC = 27;
 const int PIN_BUZZER = 5;
 
 TaskHandle_t Task1;
@@ -48,10 +48,10 @@ volatile double satellite = 0;
 volatile bool isShocked = false;
 volatile bool isConnected = false;
 volatile bool isGpsFixed = false;
+volatile bool isIgnition = false;
 
 String date = "";
 String Mac_Address = WiFi.macAddress();
-
 
 void onRmcUpdate(nmea::RmcData const rmc) {
   if (rmc.is_valid) {
@@ -73,7 +73,17 @@ void setup() {
   //for debugging
   Serial.begin(9600);
   Serial2.begin(9600);
+  uint8_t CustomMACaddress[] = { 0xB0, 0xA7, 0x32, 0x12, 0x34, 0x56 };
+  WiFi.mode(WIFI_STA);
+  esp_wifi_set_mac(WIFI_IF_STA, &CustomMACaddress[0]);  //set custom mac address
+  while (!WiFi.STA.started()) {
+    delay(100);
+  }
+  Mac_Address = WiFi.macAddress();
+
+
   pinMode(PIN_SHOCK, INPUT);
+  pinMode(PIN_ACC, INPUT);
   pinMode(PIN_BUZZER, OUTPUT);
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -132,7 +142,13 @@ void setup() {
 }
 
 void Task1code(void* pvParameters) {
-  while (true) loopTask1();
+  while (true)
+    if (isShocked == 1) {
+      digitalWrite(PIN_BUZZER, HIGH);
+      loopTask1();
+    } else {
+      digitalWrite(PIN_BUZZER, LOW);
+    }
 }
 
 //Task2code: Read Sensor then Firebase
@@ -158,37 +174,35 @@ void loopTask1() {
   content.set("fields/latitude/stringValue", String(latitude, 2));
   content.set("fields/speed/stringValue", String(speed, 2));
   content.set("fields/course/stringValue", String(course, 2));
-  content.set("fields/shock/stringValue", String(isShocked));
+  content.set("fields/shock/stringValue", String(isShocked ? "true" : "false"));
   content.set("fields/date/stringValue", String(date));
   content.set("fields/satellite/stringValue", String(satellite));
+  content.set("fields/ignition/stringValue", String(isIgnition ? "true" : "false"));
 
   if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "longitude")) {
-    Serial.printf("ok\n%s\n\n", fbdo.payload().c_str());
   }
-  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "latitude")) {
-    Serial.printf("ok\n%s\n\n", fbdo.payload().c_str());
-  }
-  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "speed")) {
-    Serial.printf("ok\n%s\n\n", fbdo.payload().c_str());
-  }
-  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "course")) {
-    Serial.printf("ok\n%s\n\n", fbdo.payload().c_str());
-  }
-  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "shock")) {
-    Serial.printf("ok\n%s\n\n", fbdo.payload().c_str());
-  }
-  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "date")) {
-    Serial.printf("ok\n%s\n\n", fbdo.payload().c_str());
-  }
-  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "satellite")) {
-    Serial.printf("ok\n%s\n\n", fbdo.payload().c_str());
-  }
-  delay(10000);
+  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "latitude"))
+}
+if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "speed")) {
+}
+if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "course")) {
+}
+if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "shock")) {
+}
+if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "date")) {
+}
+if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "satellite")) {
+}
+if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "ignition")) {
+}
+
+delay(10000);
 }
 
 void loopTask2() {
   isShocked = digitalRead(PIN_SHOCK);
-  
+  isIgnition = digitalRead(PIN_ACC);
+
   //gps
   while (Serial2.available()) {
     parser.encode((char)Serial2.read());
@@ -207,14 +221,6 @@ void loopTask2() {
     u8g2.setCursor(0, 44);
     u8g2.println(date);
     u8g2.setCursor(0, 55);
-    u8g2.println("Shock : " + String(isShocked));
+    u8g2.println("Shock : " + String(isShocked ? "true" : "false"));
   } while (u8g2.nextPage());
-
-
-  if (isShocked == 1) {
-    digitalWrite(PIN_BUZZER, HIGH);
-    loopTask1();
-  } else {
-    digitalWrite(PIN_BUZZER, LOW);
-  }
 }

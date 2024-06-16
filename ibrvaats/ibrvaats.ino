@@ -23,8 +23,6 @@ FirebaseAuth auth;
 FirebaseConfig config;
 
 unsigned long sendDataPrevMillis = 0;
-int intValue;
-float floatValue;
 bool signupOK = false;
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
@@ -173,35 +171,30 @@ void loopTask1() {
     parser.encode((char)Serial2.read());
   }
 
-  String documentPath_ID = "datas/"
-                           ""
-                           + Mac_Address;
+  String documentPath_ID = "datas";
+
   FirebaseJson content;
 
-  content.set("fields/longitude/stringValue", String(longitude, 2));
-  content.set("fields/latitude/stringValue", String(latitude, 2));
-  content.set("fields/speed/stringValue", String(speed, 2));
-  content.set("fields/course/stringValue", String(course, 2));
-  content.set("fields/shock/stringValue", String(isShocked ? "true" : "false"));
-  content.set("fields/date/stringValue", String(date));
-  content.set("fields/satellite/stringValue", String(satellite));
-  content.set("fields/ignition/stringValue", String(isIgnition ? "true" : "false"));
+  content.set("fields/id/stringValue", Mac_Address);
+  content.set("fields/longitude/doubleValue", longitude);
+  content.set("fields/latitude/doubleValue", latitude);
+  content.set("fields/speed/doubleValue", speed);
+  content.set("fields/course/doubleValue", course);
+  content.set("fields/shock/intValue", isShocked);
+  content.set("fields/date/stringValue", date);
+  content.set("fields/satellite/intValue", satellite);
+  content.set("fields/ignition/intValue", isIgnition);
 
-  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "longitude")) {
-  }
-  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "latitude")) {
-  }
-  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "speed")) {
-  }
-  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "course")) {
-  }
-  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "shock")) {
-  }
-  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "date")) {
-  }
-  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "satellite")) {
-  }
-  if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw(), "ignition")) {
+
+  bool result = Firebase.Firestore.createDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw());
+
+  if (result) {
+    Serial.println("Added a new document!");
+
+    // Serial.printf("Create document successful.\n%s\n\n", fbdo.payload().c_str());
+  } else {
+    Serial.println("Create document failed.");
+    Serial.println(fbdo.errorReason());
   }
 }
 
@@ -226,18 +219,6 @@ void loopTask2() {
     u8g2.println("Satelllite : " + String(satellite));
     u8g2.setCursor(0, 44);
     u8g2.println("Date : " + String(date));
-
-    /*u8g2.println("Longitude : " + String(longitude));
-    u8g2.setCursor(0, 11);
-    u8g2.println("Latitude : " + String(latitude));
-    u8g2.setCursor(0, 22);
-    u8g2.println("Speed : " + String(speed));
-    u8g2.setCursor(0, 33);
-    u8g2.println("Course : " + String(course));
-    u8g2.setCursor(0, 44);
-    u8g2.println(date);
-    u8g2.setCursor(0, 55);
-    u8g2.println("Shock : " + String(isShocked ? "true" : "false"));*/
 
   } while (u8g2.nextPage());
 }

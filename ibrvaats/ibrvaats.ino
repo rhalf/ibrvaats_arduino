@@ -160,9 +160,6 @@ void displayInit() {
   u8g2.setFont(u8g2_font_profont11_tr);
 }
 
-
-
-
 // Setup
 void setup() {
   //for debugging
@@ -222,10 +219,10 @@ void Task2code(void* pvParameters) {
 
 void buzz() {
   digitalWrite(PIN_BUZZER, HIGH);
-  delay(150);
+  delay(50);
 
   digitalWrite(PIN_BUZZER, LOW);
-  delay(150);
+  delay(50);
 }
 
 void sendData() {

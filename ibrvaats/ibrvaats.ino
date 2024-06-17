@@ -100,7 +100,6 @@ void watchdogInit() {
   esp_task_wdt_add(nullptr);          //add current thread to WDT watch
 }
 
-
 // Wifi
 void wifiInit() {
   WiFi.mode(WIFI_STA);
@@ -160,22 +159,7 @@ void displayInit() {
   u8g2.setFont(u8g2_font_profont11_tr);
 }
 
-// Setup
-void setup() {
-  //for debugging
-  Serial.begin(9600);
-  Serial2.begin(9600);
-
-  pinMode(PIN_SHOCK, INPUT);
-  pinMode(PIN_ACC, INPUT);
-  pinMode(PIN_BUZZER, OUTPUT);
-
-  watchdogInit();
-  wifiInit();
-  firebaseInit();
-  displayInit();
-
-
+void taskInit() {
   //create a task that will be executed in the Task1code() function, with priority 1 and executed on core 0
   xTaskCreatePinnedToCore(
     Task1code, /* Task function. */
@@ -199,9 +183,25 @@ void setup() {
   delay(100);
 }
 
+// Setup
+void setup() {
+  //for debugging
+  Serial.begin(9600);
+  Serial2.begin(9600, SERIAL_8N1, GPS_RXD2, GPS_TXD2);
+
+  pinMode(PIN_SHOCK, INPUT);
+  pinMode(PIN_ACC, INPUT);
+  pinMode(PIN_BUZZER, OUTPUT);
+
+  watchdogInit();
+  wifiInit();
+  firebaseInit();
+  displayInit();
+  taskInit();
+}
+
 void loop() {
   //empty
-  esp_task_wdt_reset();
 }
 
 void Task1code(void* pvParameters) {
@@ -226,8 +226,6 @@ void buzz() {
 }
 
 void sendData() {
-
-
   buzz();
 
   String documentPath_ID = "datas";
@@ -271,8 +269,6 @@ void loopTask1() {
 }
 
 void loopTask2() {
-
-
   u8g2.firstPage();
   do {
     u8g2.setCursor(0, 10);

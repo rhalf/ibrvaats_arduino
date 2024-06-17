@@ -78,7 +78,7 @@ void onRmcUpdate(nmea::RmcData const rmc) {
     String h = padLeft(rmc.time_utc.hour);
     String n = padLeft(rmc.time_utc.minute);
     String s = padLeft(rmc.time_utc.second);
-    date = y + "-" + m + "-" + d + "T" + h + ":" + n + ":"+ s + "Z" ;
+    date = y + "-" + m + "-" + d + "T" + h + ":" + n + ":" + s + "Z";
   }
 }
 
@@ -265,16 +265,13 @@ void loopTask1() {
   while (Serial2.available()) {
     parser.encode((char)Serial2.read());
   }
+
+  isShocked = digitalRead(PIN_SHOCK);
+  isIgnition = !digitalRead(PIN_ACC);
 }
 
 void loopTask2() {
-  isShocked = digitalRead(PIN_SHOCK);
-  isIgnition = !digitalRead(PIN_ACC);
 
-  //gps
-  while (Serial2.available()) {
-    parser.encode((char)Serial2.read());
-  }
 
   u8g2.firstPage();
   do {

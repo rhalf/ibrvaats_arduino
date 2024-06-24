@@ -3,8 +3,6 @@
 
 #include <ArduinoNmeaParser.h>
 
-
-
 #include <U8g2lib.h>
 #if defined(ESP32)
 #include <WiFi.h>
@@ -17,8 +15,9 @@
 #include "addons/TokenHelper.h"
 #include "addons/RTDBHelper.h"
 
-#define WIFI_SSID "caacbay.net"
-#define WIFI_PASSWORD "g98j3Q1BIF2g"
+
+#define WIFI_SSID "caacbay.net"  //Lativo (Boarding)
+#define WIFI_PASSWORD "g98j3Q1BIF2g"    //lemonjuice5
 
 #define FIREBASE_PROJECT_ID "ibrvaats"
 #define API_KEY "AIzaSyCu8ajKv3lyXT60rlo-1NOuEd4J7KrOY40"
@@ -37,8 +36,8 @@ FirebaseConfig config;
 U8G2_SSD1306_128X64_NONAME_1_HW_I2C
 u8g2(U8G2_R0, /*reset=*/U8X8_PIN_NONE, /*clock=*/SCL, /*data=*/SDA);
 
-uint8_t GPS_RXD2 = 17;
-uint8_t GPS_TXD2 = 16;
+uint8_t GPS_RXD2 = 16;
+uint8_t GPS_TXD2 = 17;
 uint8_t PIN_SHOCK = 14;
 uint8_t PIN_ACC = 27;
 const int PIN_BUZZER = 5;
@@ -71,14 +70,7 @@ void onRmcUpdate(nmea::RmcData const rmc) {
     latitude = rmc.latitude;
     speed = rmc.speed;
     course = rmc.course;
-
-    String y = String(rmc.date.year);
-    String m = padLeft(rmc.date.month);
-    String d = padLeft(rmc.date.day);
-    String h = padLeft(rmc.time_utc.hour);
-    String n = padLeft(rmc.time_utc.minute);
-    String s = padLeft(rmc.time_utc.second);
-    date = y + "-" + m + "-" + d + "T" + h + ":" + n + ":" + s + "Z";
+    date = String(rmc.date.year) + "-" + String(rmc.date.month) + "-" + String(rmc.date.day) + "T" + String(rmc.time_utc.hour) + ":" + String(rmc.time_utc.minute) + ":" + String(rmc.time_utc.second) + "Z";
   }
 }
 
@@ -188,7 +180,6 @@ void setup() {
   //for debugging
   Serial.begin(9600);
   Serial2.begin(9600, SERIAL_8N1, GPS_RXD2, GPS_TXD2);
-
   pinMode(PIN_SHOCK, INPUT);
   pinMode(PIN_ACC, INPUT);
   pinMode(PIN_BUZZER, OUTPUT);
@@ -212,6 +203,7 @@ void Task1code(void* pvParameters) {
 
 //Task2code: Read Sensor then Firebase
 void Task2code(void* pvParameters) {
+
   while (true) {
     loopTask2();
   }
@@ -227,9 +219,10 @@ void buzz() {
 
 void sendData() {
   buzz();
-
+  while (Serial2.available()) {
+    parser.encode((char)Serial2.read());
+  }
   String documentPath_ID = "datas";
-
   FirebaseJson content;
 
   content.set("fields/id/stringValue", MAC_ADDRESS);
@@ -242,8 +235,6 @@ void sendData() {
   content.set("fields/satellite/integerValue", satellite);
   content.set("fields/ignition/booleanValue", isIgnition);
   content.set("fields/gpsFixed/booleanValue", isGpsFixed);
-
-
   bool result = Firebase.Firestore.createDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw());
 
   if (result) {
@@ -260,15 +251,16 @@ void sendData() {
 }
 
 void loopTask1() {
-  while (Serial2.available()) {
-    parser.encode((char)Serial2.read());
-  }
-
   isShocked = digitalRead(PIN_SHOCK);
   isIgnition = !digitalRead(PIN_ACC);
 }
 
+
 void loopTask2() {
+  while (Serial2.available()) {
+    parser.encode((char)Serial2.read());
+  }
+
   u8g2.firstPage();
   do {
     u8g2.setCursor(0, 10);
@@ -283,7 +275,6 @@ void loopTask2() {
     u8g2.println("Shock: " + String(isShocked));
     u8g2.setCursor(0, 60);
     u8g2.println("Ignition: " + String(isIgnition));
-
 
   } while (u8g2.nextPage());
 

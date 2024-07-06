@@ -1,4 +1,4 @@
-#include <Arduino.h>
+// #include <Arduino.h>
 #include <Wire.h>
 
 #include <ArduinoNmeaParser.h>
@@ -16,8 +16,8 @@
 #include "addons/RTDBHelper.h"
 
 
-#define WIFI_SSID "caacbay.net"  //Lativo (Boarding)
-#define WIFI_PASSWORD "g98j3Q1BIF2g"    //lemonjuice5
+#define WIFI_SSID "caacbay.net"       //Lativo (Boarding)
+#define WIFI_PASSWORD "g98j3Q1BIF2g"  //lemonjuice5
 
 #define FIREBASE_PROJECT_ID "ibrvaats"
 #define API_KEY "AIzaSyCu8ajKv3lyXT60rlo-1NOuEd4J7KrOY40"
@@ -42,8 +42,8 @@ uint8_t PIN_SHOCK = 14;
 uint8_t PIN_ACC = 27;
 const int PIN_BUZZER = 5;
 
+TaskHandle_t Task0;
 TaskHandle_t Task1;
-TaskHandle_t Task2;
 
 volatile double longitude = 0;
 volatile double latitude = 0;
@@ -98,36 +98,36 @@ void wifiInit() {
 
   Serial.println("Wifi starting!");
   while (!WiFi.STA.started()) {
-    esp_task_wdt_reset();
+    // esp_task_wdt_reset();
     Serial.print(".");
-    delay(500);
+    vTaskDelay(500 / portTICK_PERIOD_MS);
   }
   Serial.println();
 
   Serial.println("Connecting to Wi-Fi");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
-    esp_task_wdt_reset();
+    // esp_task_wdt_reset();
     Serial.print(".");
-    delay(500);
+    vTaskDelay(500 / portTICK_PERIOD_MS);
   }
   Serial.println();
 
   Serial.print("Connected with IP: ");
   Serial.println(WiFi.localIP());
 
-  bool isPinged = false;
-  while (!Ping.ping("www.google.com", 3)) {
-    esp_task_wdt_reset();
-    Serial.print(".");
-    delay(500);
-  }
-  Serial.println();
-
-  Serial.println("Ping www.google.com successful!");
-
   MAC_ADDRESS = WiFi.macAddress();
   Serial.println();
+
+  // bool isPinged = false;
+  // while (!Ping.ping("www.google.com", 3)) {
+  //   // esp_task_wdt_reset();
+  //   Serial.print(".");
+  //   vTaskDelay(500 / portTICK_PERIOD_MS);
+  // }
+  // Serial.println();
+
+  // Serial.println("Ping www.google.com successful!");
 }
 
 // Firebase
@@ -152,27 +152,25 @@ void displayInit() {
 }
 
 void taskInit() {
-  //create a task that will be executed in the Task1code() function, with priority 1 and executed on core 0
+  //create a task that will be executed in the task0() function, with priority 1 and executed on core 0
   xTaskCreatePinnedToCore(
-    Task1code, /* Task function. */
-    "Task1",   /* name of task. */
-    10000,     /* Stack size of task */
-    NULL,      /* parameter of the task */
-    1,         /* priority of the task */
-    &Task1,    /* Task handle to keep track of created task */
-    0);        /* pin task to core 0 */
-  delay(100);
+    task0,   /* Task function. */
+    "Task0", /* name of task. */
+    10000,   /* Stack size of task */
+    NULL,    /* parameter of the task */
+    1,       /* priority of the task */
+    &Task0,  /* Task handle to keep track of created task */
+    0);      /* pin task to core 0 */
 
-  //create a task that will be executed in the Task2code() function, with priority 1 and executed on core 1
+  //create a task that will be executed in the Task1code() function, with priority 1 and executed on core 1
   xTaskCreatePinnedToCore(
-    Task2code, /* Task function. */
-    "Task2",   /* name of task. */
-    10000,     /* Stack size of task */
-    NULL,      /* parameter of the task */
-    1,         /* priority of the task */
-    &Task2,    /* Task handle to keep track of created task */
-    1);        /* pin task to core 1 */
-  delay(100);
+    task1,   /* Task function. */
+    "Task1", /* name of task. */
+    10000,   /* Stack size of task */
+    NULL,    /* parameter of the task */
+    1,       /* priority of the task */
+    &Task1,  /* Task handle to keep track of created task */
+    1);      /* pin task to core 1 */
 }
 
 // Setup
@@ -185,43 +183,44 @@ void setup() {
   pinMode(PIN_BUZZER, OUTPUT);
 
   watchdogInit();
-  wifiInit();
-  firebaseInit();
+
   displayInit();
   taskInit();
+
+  wifiInit();
 }
 
 void loop() {
   //empty
 }
 
-void Task1code(void* pvParameters) {
-  while (true) {
-    loopTask1();
+void task0(void* pvParameters) {
+  for (;;) {
+    loopTask0();
   }
 }
 
-//Task2code: Read Sensor then Firebase
-void Task2code(void* pvParameters) {
-
-  while (true) {
-    loopTask2();
+//task1: Read Sensor then Firebase
+void task1(void* pvParameters) {
+  for (;;) {
+    loopTask1();
   }
 }
 
 void buzz() {
   digitalWrite(PIN_BUZZER, HIGH);
-  delay(50);
+  vTaskDelay(50 / portTICK_PERIOD_MS);
 
   digitalWrite(PIN_BUZZER, LOW);
-  delay(50);
+  vTaskDelay(50 / portTICK_PERIOD_MS);
 }
 
 void sendData() {
   buzz();
-  while (Serial2.available()) {
-    parser.encode((char)Serial2.read());
-  }
+
+  firebaseInit();
+
+  buzz();
   String documentPath_ID = "datas";
   FirebaseJson content;
 
@@ -235,28 +234,35 @@ void sendData() {
   content.set("fields/satellite/integerValue", satellite);
   content.set("fields/ignition/booleanValue", isIgnition);
   content.set("fields/gpsFixed/booleanValue", isGpsFixed);
+
   bool result = Firebase.Firestore.createDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw());
 
   if (result) {
-    Serial.println("Added a new document!");
+    Serial.println("######################## Added a new document!");
   } else {
-    Serial.println("Create document failed.");
+    Serial.print("######################## ");
     Serial.println(fbdo.errorReason());
   }
 
   buzz();
   buzz();
 
-  delay(2000);
+  delay(10000);
+  esp_task_wdt_reset();
 }
 
-void loopTask1() {
-  isShocked = digitalRead(PIN_SHOCK);
+void loopTask0() {
+
+  if (!isShocked && digitalRead(PIN_SHOCK)) {
+    Serial.println("################# SHOCK PIN TRUE");
+    isShocked = true;
+  }
+
   isIgnition = !digitalRead(PIN_ACC);
 }
 
 
-void loopTask2() {
+void loopTask1() {
   while (Serial2.available()) {
     parser.encode((char)Serial2.read());
   }
@@ -276,7 +282,11 @@ void loopTask2() {
     u8g2.setCursor(0, 60);
     u8g2.println("Ignition: " + String(isIgnition));
 
+
   } while (u8g2.nextPage());
 
-  if (isShocked) sendData();
+  if (isShocked) {
+    sendData();
+    isShocked = false;
+  }
 }

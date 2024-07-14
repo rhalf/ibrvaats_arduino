@@ -16,6 +16,8 @@
 #include "addons/RTDBHelper.h"
 
 
+//#define WIFI_SSID "Lativo (Boarding)"  
+//#define WIFI_PASSWORD "lemonjuice5"   
 #define WIFI_SSID "caacbay.net"       //Lativo (Boarding)
 #define WIFI_PASSWORD "g98j3Q1BIF2g"  //lemonjuice5
 
@@ -72,7 +74,7 @@ void onRmcUpdate(nmea::RmcData const rmc) {
   if (rmc.is_valid) {
     longitude = rmc.longitude;
     latitude = rmc.latitude;
-    speed = rmc.speed;
+    speed = isnan(rmc.speed) ? 0 : rmc.speed;
     course = isnan(rmc.course) ? 0 : rmc.course;
     date = String(rmc.date.year) + "-" + String(rmc.date.month) + "-" + String(rmc.date.day) + "T" + String(rmc.time_utc.hour) + ":" + String(rmc.time_utc.minute) + ":" + String(rmc.time_utc.second) + "Z";
   }

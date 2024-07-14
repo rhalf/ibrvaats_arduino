@@ -73,7 +73,7 @@ void onRmcUpdate(nmea::RmcData const rmc) {
     longitude = rmc.longitude;
     latitude = rmc.latitude;
     speed = rmc.speed;
-    course = rmc.course;
+    course = isnan(rmc.course) 0 : rmc.course;
     date = String(rmc.date.year) + "-" + String(rmc.date.month) + "-" + String(rmc.date.day) + "T" + String(rmc.time_utc.hour) + ":" + String(rmc.time_utc.minute) + ":" + String(rmc.time_utc.second) + "Z";
   }
 }
@@ -134,7 +134,7 @@ void firebaseInit() {
 
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
-  
+
   Serial.printf("Connected to Firebase");
 }
 

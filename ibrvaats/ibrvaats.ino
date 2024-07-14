@@ -63,6 +63,10 @@ String padLeft(int value) {
   else String(value);
 }
 
+bool ping() {
+  return Ping.ping("www.google.com", 3);
+}
+
 // GPS Datas
 void onRmcUpdate(nmea::RmcData const rmc) {
   if (rmc.is_valid) {
@@ -98,18 +102,16 @@ void wifiInit() {
 
   Serial.println("Wifi starting!");
   while (!WiFi.STA.started()) {
-    // esp_task_wdt_reset();
     Serial.print(".");
-    vTaskDelay(500 / portTICK_PERIOD_MS);
+    delay(500);
   }
   Serial.println();
 
   Serial.println("Connecting to Wi-Fi");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
-    // esp_task_wdt_reset();
     Serial.print(".");
-    vTaskDelay(500 / portTICK_PERIOD_MS);
+    delay(500);
   }
   Serial.println();
 
@@ -118,21 +120,11 @@ void wifiInit() {
 
   MAC_ADDRESS = WiFi.macAddress();
   Serial.println();
-
-  // bool isPinged = false;
-  // while (!Ping.ping("www.google.com", 3)) {
-  //   // esp_task_wdt_reset();
-  //   Serial.print(".");
-  //   vTaskDelay(500 / portTICK_PERIOD_MS);
-  // }
-  // Serial.println();
-
-  // Serial.println("Ping www.google.com successful!");
 }
 
 // Firebase
 void firebaseInit() {
-  Serial.printf("Firebase Client v%s\n\n", FIREBASE_CLIENT_VERSION);
+  // Serial.printf("Firebase Client v%s\n\n", FIREBASE_CLIENT_VERSION);
 
   config.api_key = API_KEY;
   auth.user.email = USER_EMAIL;
@@ -142,6 +134,8 @@ void firebaseInit() {
 
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
+  
+  Serial.printf("Connected to Firebase");
 }
 
 // Display
@@ -218,13 +212,15 @@ void buzz() {
 void sendData() {
   buzz();
 
+  if (!ping()) wifiInit();
+
   firebaseInit();
 
   buzz();
   String documentPath_ID = "datas";
   FirebaseJson content;
 
-  content.set("fields/id/stringValue", MAC_ADDRESS);
+  content.set("fields/mac/stringValue", MAC_ADDRESS);
   content.set("fields/date/timestampValue", date);
   content.set("fields/longitude/doubleValue", longitude);
   content.set("fields/latitude/doubleValue", latitude);

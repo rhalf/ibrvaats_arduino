@@ -16,8 +16,8 @@
 #include "addons/RTDBHelper.h"
 
 
-//#define WIFI_SSID "Lativo (Boarding)"  
-//#define WIFI_PASSWORD "lemonjuice5"   
+//#define WIFI_SSID "Lativo (Boarding)"
+//#define WIFI_PASSWORD "lemonjuice5"
 #define WIFI_SSID "caacbay.net"       //Lativo (Boarding)
 #define WIFI_PASSWORD "g98j3Q1BIF2g"  //lemonjuice5
 
@@ -72,7 +72,8 @@ bool ping() {
 // GPS Datas
 void onRmcUpdate(nmea::RmcData const rmc) {
   if (rmc.is_valid) {
-    longitude = isnan(rmc.longitude) ? 0 : rmc.longitude;;
+    longitude = isnan(rmc.longitude) ? 0 : rmc.longitude;
+    ;
     latitude = isnan(rmc.latitude) ? 0 : rmc.latitude;
     speed = isnan(rmc.speed) ? 0 : rmc.speed;
     course = isnan(rmc.course) ? 0 : rmc.course;
@@ -83,6 +84,10 @@ void onRmcUpdate(nmea::RmcData const rmc) {
 void onGgaUpdate(nmea::GgaData const gga) {
   if (gga.fix_quality != nmea::FixQuality::Invalid) {
     satellite = gga.num_satellites;
+    isGpsFixed = true;
+  } else {
+    isGpsFixed = false;
+    satellite = 0;
   }
 }
 ArduinoNmeaParser parser(onRmcUpdate, onGgaUpdate);

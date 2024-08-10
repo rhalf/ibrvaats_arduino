@@ -56,6 +56,7 @@ volatile bool isShocked = false;
 volatile bool isConnected = false;
 volatile bool isGpsFixed = false;
 volatile bool isIgnition = false;
+volatile int orientation = "Top";
 
 String date = "2020-01-01T00:00:00Z";
 String MAC_ADDRESS = WiFi.macAddress();
@@ -189,6 +190,8 @@ void setup() {
   taskInit();
 
   wifiInit();
+
+  firebaseInit();
 }
 
 void loop() {
@@ -221,7 +224,7 @@ void sendData() {
 
   if (!ping()) wifiInit();
 
-  firebaseInit();
+
 
   buzz();
   String documentPath_ID = "datas";
@@ -241,9 +244,11 @@ void sendData() {
   bool result = Firebase.Firestore.createDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw());
 
   if (result) {
-    Serial.println("######################## Added a new document!");
+    Serial.println("########################");
+    Serial.plrintln("Added a new document!");
   } else {
-    Serial.print("######################## ");
+    Serial.println("########################");
+    Serial.plrintln("Error!");
     Serial.println(fbdo.errorReason());
   }
 

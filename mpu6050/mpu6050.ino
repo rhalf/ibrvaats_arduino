@@ -10,7 +10,11 @@
 
 Adafruit_MPU6050 mpu;
 
+const int PIN_BUZZER = 5;
+
 void setup(void) {
+  pinMode(PIN_BUZZER, OUTPUT);
+
   Serial.begin(115200);
   while (!Serial)
     delay(10); // will pause Zero, Leonardo, etc until serial console opens

@@ -44,8 +44,9 @@ uint8_t PIN_SHOCK = 14;
 uint8_t PIN_ACC = 27;
 const int PIN_BUZZER = 5;
 
-TaskHandle_t Task0;
-TaskHandle_t Task1;
+TaskHandle_t TaskDisplay;
+TaskHandle_t TaskSensor;
+TaskHandle_t TaskWifi;
 
 volatile double longitude = 0;
 volatile double latitude = 0;
@@ -56,19 +57,21 @@ volatile bool isShocked = false;
 volatile bool isConnected = false;
 volatile bool isGpsFixed = false;
 volatile bool isIgnition = false;
-volatile int orientation = "Top";
+
+
 
 String date = "2020-01-01T00:00:00Z";
 String MAC_ADDRESS = WiFi.macAddress();
+String orientation = "TOP";
 
 String padLeft(int value) {
   if (value < 10) return "0" + String(value);
   else String(value);
 }
 
-bool ping() {
-  return Ping.ping("www.google.com", 3);
-}
+// bool ping() {
+//   return Ping.ping("www.google.com", 3);
+// }
 
 // GPS Datas
 void onRmcUpdate(nmea::RmcData const rmc) {
@@ -104,31 +107,7 @@ void watchdogInit() {
   esp_task_wdt_add(nullptr);          //add current thread to WDT watch
 }
 
-// Wifi
-void wifiInit() {
-  WiFi.mode(WIFI_STA);
 
-  Serial.println("Wifi starting!");
-  while (!WiFi.STA.started()) {
-    Serial.print(".");
-    delay(500);
-  }
-  Serial.println();
-
-  Serial.println("Connecting to Wi-Fi");
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    delay(500);
-  }
-  Serial.println();
-
-  Serial.print("Connected with IP: ");
-  Serial.println(WiFi.localIP());
-
-  MAC_ADDRESS = WiFi.macAddress();
-  Serial.println();
-}
 
 // Firebase
 void firebaseInit() {
@@ -146,34 +125,38 @@ void firebaseInit() {
   Serial.printf("Connected to Firebase");
 }
 
-// Display
-void displayInit() {
-  u8g2.begin();
-  u8g2.enableUTF8Print();
-  u8g2.setFont(u8g2_font_profont11_tr);
-}
+
 
 void taskInit() {
-  //create a task that will be executed in the task0() function, with priority 1 and executed on core 0
-  xTaskCreatePinnedToCore(
-    task0,   /* Task function. */
-    "Task0", /* name of task. */
-    10000,   /* Stack size of task */
-    NULL,    /* parameter of the task */
-    1,       /* priority of the task */
-    &Task0,  /* Task handle to keep track of created task */
-    0);      /* pin task to core 0 */
+  xTaskCreate(
+    taskDisplay,   /* Task function. */
+    "TaskDisplay", /* name of task. */
+    10000,         /* Stack size of task */
+    NULL,          /* parameter of the task */
+    3,             /* priority of the task */
+    &TaskDisplay   /* Task handle to keep track of created task */
+  );
 
-  //create a task that will be executed in the Task1code() function, with priority 1 and executed on core 1
-  xTaskCreatePinnedToCore(
-    task1,   /* Task function. */
-    "Task1", /* name of task. */
-    10000,   /* Stack size of task */
-    NULL,    /* parameter of the task */
-    1,       /* priority of the task */
-    &Task1,  /* Task handle to keep track of created task */
-    1);      /* pin task to core 1 */
+  xTaskCreate(
+    taskSensor,   /* Task function. */
+    "TaskSensor", /* name of task. */
+    10000,        /* Stack size of task */
+    NULL,         /* parameter of the task */
+    1,            /* priority of the task */
+    &TaskSensor   /* Task handle to keep track of created task */
+  );              
+
+  xTaskCreate(
+    taskWifi,   /* Task function. */
+    "TaskWifi", /* name of task. */
+    10000,      /* Stack size of task */
+    NULL,       /* parameter of the task */
+    1,          /* priority of the task */
+    &TaskWifi   /* Task handle to keep track of created task*/
+  );          
 }
+
+
 
 // Setup
 void setup() {
@@ -186,10 +169,7 @@ void setup() {
 
   watchdogInit();
 
-  displayInit();
   taskInit();
-
-  wifiInit();
 
   firebaseInit();
 }
@@ -198,16 +178,69 @@ void loop() {
   //empty
 }
 
-void task0(void* pvParameters) {
+//taskWifi: connect to wifi
+void taskWifi(void* pvParameters) {
+  Serial.println("WIFI: starting!");
+  WiFi.mode(WIFI_STA);
+
   for (;;) {
-    loopTask0();
+    delay(1000);
+
+    if (!WiFi.STA.started()) delay(500);
+
+    if (WiFi.status() == WL_CONNECTED) continue;
+
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+    Serial.println("WIFI: Connecting...");
+    while (WiFi.status() != WL_CONNECTED) delay(500);
+
+    Serial.print("WIFI: Connected with IP: ");
+    Serial.println(WiFi.localIP());
+
+    MAC_ADDRESS = WiFi.macAddress();
   }
 }
 
-//task1: Read Sensor then Firebase
-void task1(void* pvParameters) {
+void taskDisplay(void* pvParameters) {
+  u8g2.begin();
+  u8g2.enableUTF8Print();
+  u8g2.setFont(u8g2_font_profont11_tr);
+
   for (;;) {
-    loopTask1();
+    delay(100);
+
+    u8g2.firstPage();
+    do {
+      u8g2.setCursor(0, 10);
+      u8g2.println(String(MAC_ADDRESS));
+      u8g2.setCursor(0, 20);
+      u8g2.println("Date: " + String(date));
+      u8g2.setCursor(0, 30);
+      u8g2.println("Satelllite : " + String(satellite));
+      u8g2.setCursor(0, 40);
+      u8g2.println("Speed: " + String(speed));
+      u8g2.setCursor(0, 50);
+      u8g2.println("Shock: " + String(isShocked));
+      u8g2.setCursor(0, 60);
+      u8g2.println("Ignition: " + String(isIgnition));
+    } while (u8g2.nextPage());
+  }
+}
+
+//taskSensor: Read Sensor then Firebase
+void taskSensor(void* pvParameters) {
+  for (;;) {
+
+    if (!isShocked && digitalRead(PIN_SHOCK)) {
+      Serial.println("SENSOR: Shock!");
+    }
+    isShocked = digitalRead(PIN_SHOCK);
+
+    if (!isIgnition && !digitalRead(PIN_ACC)) {
+      Serial.println("SENSOR: Acc!");
+    }
+    isIgnition = !digitalRead(PIN_ACC);
   }
 }
 
@@ -222,9 +255,7 @@ void buzz() {
 void sendData() {
   buzz();
 
-  if (!ping()) wifiInit();
-
-
+  if (WiFi.status() == WL_CONNECTED) return;
 
   buzz();
   String documentPath_ID = "datas";
@@ -244,11 +275,11 @@ void sendData() {
   bool result = Firebase.Firestore.createDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw());
 
   if (result) {
-    Serial.println("########################");
-    Serial.plrintln("Added a new document!");
+    Serial.print("########################");
+    Serial.println("Added a new document!");
   } else {
-    Serial.println("########################");
-    Serial.plrintln("Error!");
+    Serial.print("########################");
+    Serial.println("Error!");
     Serial.println(fbdo.errorReason());
   }
 
@@ -256,45 +287,21 @@ void sendData() {
   buzz();
 
   delay(10000);
-  esp_task_wdt_reset();
-}
-
-void loopTask0() {
-
-  if (!isShocked && digitalRead(PIN_SHOCK)) {
-    Serial.println("################# SHOCK PIN TRUE");
-    isShocked = true;
-  }
-
-  isIgnition = !digitalRead(PIN_ACC);
+  // esp_task_wdt_reset();
 }
 
 
-void loopTask1() {
-  while (Serial2.available()) {
-    parser.encode((char)Serial2.read());
-  }
-
-  u8g2.firstPage();
-  do {
-    u8g2.setCursor(0, 10);
-    u8g2.println(String(MAC_ADDRESS));
-    u8g2.setCursor(0, 20);
-    u8g2.println("Date: " + String(date));
-    u8g2.setCursor(0, 30);
-    u8g2.println("Satelllite : " + String(satellite));
-    u8g2.setCursor(0, 40);
-    u8g2.println("Speed: " + String(speed));
-    u8g2.setCursor(0, 50);
-    u8g2.println("Shock: " + String(isShocked));
-    u8g2.setCursor(0, 60);
-    u8g2.println("Ignition: " + String(isIgnition));
 
 
-  } while (u8g2.nextPage());
+// void loopTask1() {
+//   while (Serial2.available()) {
+//     parser.encode((char)Serial2.read());
+//   }
 
-  if (isShocked) {
-    sendData();
-    isShocked = false;
-  }
-}
+
+
+//   if (isShocked) {
+//     sendData();
+//     isShocked = false;
+//   }
+// }

@@ -4,17 +4,25 @@
 #include <ArduinoNmeaParser.h>
 
 #include <U8g2lib.h>
-#if defined(ESP32)
 #include <WiFi.h>
+
 #include <esp_now.h>
 #include "esp_wifi.h"
-#include <ESP32Ping.h>
-#endif
 
 #include <Firebase_ESP_Client.h>
 #include "addons/TokenHelper.h"
 #include "addons/RTDBHelper.h"
 
+
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+Adafruit_MPU6050 mpu;
+
+// #include <NTPClient.h>
+// #include <WiFiUdp.h>
+
+// WiFiUDP ntpUDP;
+// NTPClient timeClient(ntpUDP);
 
 //#define WIFI_SSID "Lativo (Boarding)"
 //#define WIFI_PASSWORD "lemonjuice5"
@@ -42,46 +50,75 @@ uint8_t GPS_RXD2 = 16;
 uint8_t GPS_TXD2 = 17;
 uint8_t PIN_SHOCK = 14;
 uint8_t PIN_ACC = 27;
+uint8_t PIN_FRONT = 33;
+uint8_t PIN_REAR = 25;
+
 const int PIN_BUZZER = 5;
 
 TaskHandle_t TaskDisplay;
 TaskHandle_t TaskSensor;
 TaskHandle_t TaskWifi;
+TaskHandle_t TaskFirebase;
+TaskHandle_t TaskGps;
+TaskHandle_t TaskUpload;
+TaskHandle_t TaskMpu6050;
 
 volatile double longitude = 0;
 volatile double latitude = 0;
 volatile double speed = 0;
 volatile double course = 0;
+volatile double temperature = 0;
+
+volatile double accelX = 0;
+volatile double accelY = 0;
+volatile double accelZ = 0;
+volatile double gyroX = 0;
+volatile double gyroY = 0;
+volatile double gyroZ = 0;
+
 volatile int satellite = 0;
 volatile bool isShocked = false;
+volatile bool isFront = false;
+volatile bool isRear = false;
 volatile bool isConnected = false;
 volatile bool isGpsFixed = false;
 volatile bool isIgnition = false;
 
+String gpsTime = "2020-01-01T00:00:00Z";
+// String serverTime = "2020-01-01T00:00:00Z";
 
-
-String date = "2020-01-01T00:00:00Z";
 String MAC_ADDRESS = WiFi.macAddress();
+String PLATE_NUMER = "AAA1234";
 String orientation = "TOP";
+
+//====================================================================== Functions
+void buzz(uint8_t times = 1) {
+  for (uint8_t t = 0; t < times; t++) {
+    digitalWrite(PIN_BUZZER, HIGH);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+    digitalWrite(PIN_BUZZER, LOW);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+  }
+}
 
 String padLeft(int value) {
   if (value < 10) return "0" + String(value);
   else String(value);
 }
 
-// bool ping() {
-//   return Ping.ping("www.google.com", 3);
-// }
+String toTimestamp(int year, int month, int day, int hour, int minute, int second) {
+  return String(year) + "-" + String(month) + "-" + String(day) + "T" + String(hour) + ":" + String(minute) + ":" + String(second) + "Z";
+}
 
-// GPS Datas
+
+//====================================================================== GPS Datas
 void onRmcUpdate(nmea::RmcData const rmc) {
   if (rmc.is_valid) {
     longitude = isnan(rmc.longitude) ? 0 : rmc.longitude;
-    ;
     latitude = isnan(rmc.latitude) ? 0 : rmc.latitude;
     speed = isnan(rmc.speed) ? 0 : rmc.speed;
     course = isnan(rmc.course) ? 0 : rmc.course;
-    date = String(rmc.date.year) + "-" + String(rmc.date.month) + "-" + String(rmc.date.day) + "T" + String(rmc.time_utc.hour) + ":" + String(rmc.time_utc.minute) + ":" + String(rmc.time_utc.second) + "Z";
+    gpsTime = toTimestamp(rmc.date.year, rmc.date.month, rmc.date.day, rmc.time_utc.hour, rmc.time_utc.minute, rmc.time_utc.second);
   }
 }
 
@@ -96,38 +133,69 @@ void onGgaUpdate(nmea::GgaData const gga) {
 }
 ArduinoNmeaParser parser(onRmcUpdate, onGgaUpdate);
 
-
-// Watchdog
+//====================================================================== Watchdog
 void watchdogInit() {
   esp_task_wdt_config_t config = {
     .timeout_ms = 10000,
     .trigger_panic = false,
   };
   esp_task_wdt_reconfigure(&config);  //enable panic so ESP32 restarts
-  esp_task_wdt_add(nullptr);          //add current thread to WDT watch
+
+  // esp_task_wdt_add(TaskDisplay);   //add current thread to WDT watch
+  // esp_task_wdt_add(TaskSensor);    //add current thread to WDT watch
+  // esp_task_wdt_add(TaskWifi);      //add current thread to WDT watch
+  // esp_task_wdt_add(TaskFirebase);  //add current thread to WDT watch
+  // esp_task_wdt_add(TaskGps);       //add current thread to WDT watch
+  // esp_task_wdt_add(TaskUpload);    //add current thread to WDT watch
+
+  esp_task_wdt_delete(TaskDisplay);   //delete current thread to WDT watch
+  esp_task_wdt_delete(TaskSensor);    //delete current thread to WDT watch
+  esp_task_wdt_delete(TaskWifi);      //delete current thread to WDT watch
+  esp_task_wdt_delete(TaskFirebase);  //delete current thread to WDT watch
+  esp_task_wdt_delete(TaskGps);       //delete current thread to WDT watch
+  esp_task_wdt_delete(TaskUpload);    //delete current thread to WDT watch
+  esp_task_wdt_delete(TaskMpu6050);   //delete current thread to WDT watch
 }
 
 
-
-// Firebase
-void firebaseInit() {
-  // Serial.printf("Firebase Client v%s\n\n", FIREBASE_CLIENT_VERSION);
-
-  config.api_key = API_KEY;
-  auth.user.email = USER_EMAIL;
-  auth.user.password = USER_PASSWORD;
-
-  config.token_status_callback = tokenStatusCallback;
-
-  Firebase.begin(&config, &auth);
-  Firebase.reconnectWiFi(true);
-
-  Serial.printf("Connected to Firebase");
-}
-
-
-
+//====================================================================== TaskInit
 void taskInit() {
+  xTaskCreate(
+    taskWifi,   /* Task function. */
+    "TaskWifi", /* name of task. */
+    10000,      /* Stack size of task */
+    NULL,       /* parameter of the task */
+    1,          /* priority of the task */
+    &TaskWifi   /* Task handle to keep track of created task*/
+  );
+
+  xTaskCreate(
+    taskFirebase,   /* Task function. */
+    "taskFirebase", /* name of task. */
+    10000,          /* Stack size of task */
+    NULL,           /* parameter of the task */
+    1,              /* priority of the task */
+    &TaskFirebase   /* Task handle to keep track of created task*/
+  );
+
+  xTaskCreate(
+    taskSensor,   /* Task function. */
+    "TaskSensor", /* name of task. */
+    10000,        /* Stack size of task */
+    NULL,         /* parameter of the task */
+    1,            /* priority of the task */
+    &TaskSensor   /* Task handle to keep track of created task */
+  );
+
+  xTaskCreate(
+    taskGps,   /* Task function. */
+    "TaskGps", /* name of task. */
+    10000,     /* Stack size of task */
+    NULL,      /* parameter of the task */
+    2,         /* priority of the task */
+    &TaskGps   /* Task handle to keep track of created task*/
+  );
+
   xTaskCreate(
     taskDisplay,   /* Task function. */
     "TaskDisplay", /* name of task. */
@@ -138,53 +206,47 @@ void taskInit() {
   );
 
   xTaskCreate(
-    taskSensor,   /* Task function. */
-    "TaskSensor", /* name of task. */
+    taskUpload,   /* Task function. */
+    "TaskUpload", /* name of task. */
     10000,        /* Stack size of task */
     NULL,         /* parameter of the task */
-    1,            /* priority of the task */
-    &TaskSensor   /* Task handle to keep track of created task */
-  );              
+    3,            /* priority of the task */
+    &TaskUpload   /* Task handle to keep track of created task */
+  );
 
   xTaskCreate(
-    taskWifi,   /* Task function. */
-    "TaskWifi", /* name of task. */
-    10000,      /* Stack size of task */
-    NULL,       /* parameter of the task */
-    1,          /* priority of the task */
-    &TaskWifi   /* Task handle to keep track of created task*/
-  );          
+    taskMpu6050,   /* Task function. */
+    "TaskMpu6050", /* name of task. */
+    10000,         /* Stack size of task */
+    NULL,          /* parameter of the task */
+    2,             /* priority of the task */
+    &TaskMpu6050   /* Task handle to keep track of created task */
+  );
 }
 
 
 
-// Setup
-void setup() {
-  //for debugging
-  Serial.begin(9600);
+void taskGps(void* pvParameters) {
   Serial2.begin(9600, SERIAL_8N1, GPS_RXD2, GPS_TXD2);
-  pinMode(PIN_SHOCK, INPUT);
-  pinMode(PIN_ACC, INPUT);
-  pinMode(PIN_BUZZER, OUTPUT);
 
-  watchdogInit();
+  for (;;) {
+    // esp_task_wdt_reset();
+    vTaskDelay(1 / portTICK_PERIOD_MS);
 
-  taskInit();
-
-  firebaseInit();
+    while (Serial2.available()) {
+      parser.encode((char)Serial2.read());
+    }
+  }
 }
 
-void loop() {
-  //empty
-}
-
-//taskWifi: connect to wifi
+//Connect to wifi
 void taskWifi(void* pvParameters) {
   Serial.println("WIFI: starting!");
   WiFi.mode(WIFI_STA);
 
   for (;;) {
-    delay(1000);
+    // esp_task_wdt_reset();
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
 
     if (!WiFi.STA.started()) delay(500);
 
@@ -202,35 +264,74 @@ void taskWifi(void* pvParameters) {
   }
 }
 
+// Firebase
+void taskFirebase(void* pvParameters) {
+  // Serial.printf("Firebase Client v%s\n\n", FIREBASE_CLIENT_VERSION);
+  uint8_t attempt = 0;
+  for (;;) {
+    // esp_task_wdt_reset();
+    vTaskDelay(1 / portTICK_PERIOD_MS);
+
+    if (WiFi.status() != WL_CONNECTED) continue;
+
+    if (Firebase.ready()) continue;
+
+    if (Firebase.isTokenExpired()) attempt = 0;
+
+    if (attempt > 0) continue;
+
+    config.api_key = API_KEY;
+    auth.user.email = USER_EMAIL;
+    auth.user.password = USER_PASSWORD;
+
+    config.token_status_callback = tokenStatusCallback;
+
+    Firebase.begin(&config, &auth);
+    Firebase.reconnectWiFi(true);
+
+    Serial.println("Connected to Firebase!");
+    attempt++;
+  }
+}
+
 void taskDisplay(void* pvParameters) {
   u8g2.begin();
   u8g2.enableUTF8Print();
   u8g2.setFont(u8g2_font_profont11_tr);
 
   for (;;) {
-    delay(100);
+    // esp_task_wdt_reset();
+    vTaskDelay(100 / portTICK_PERIOD_MS);
 
     u8g2.firstPage();
     do {
       u8g2.setCursor(0, 10);
-      u8g2.println(String(MAC_ADDRESS));
+      u8g2.println("PLATE: " + String(PLATE_NUMER));
       u8g2.setCursor(0, 20);
-      u8g2.println("Date: " + String(date));
+      u8g2.println(String(gpsTime));
       u8g2.setCursor(0, 30);
-      u8g2.println("Satelllite : " + String(satellite));
+      u8g2.println("SAT : " + String(satellite) + ", " + String(isGpsFixed ? "Yes" : "No"));
       u8g2.setCursor(0, 40);
-      u8g2.println("Speed: " + String(speed));
+      u8g2.println("SPEED: " + String(speed));
       u8g2.setCursor(0, 50);
-      u8g2.println("Shock: " + String(isShocked));
+      u8g2.println("SHOCK: " + String(isShocked) + ", " + String(isFront) + ":" + String(isRear));
       u8g2.setCursor(0, 60);
-      u8g2.println("Ignition: " + String(isIgnition));
+      u8g2.println("ORIENTATION: " + String(orientation));
     } while (u8g2.nextPage());
   }
 }
 
 //taskSensor: Read Sensor then Firebase
 void taskSensor(void* pvParameters) {
+  pinMode(PIN_SHOCK, INPUT);
+  pinMode(PIN_ACC, INPUT);
+  pinMode(PIN_BUZZER, OUTPUT);
+  pinMode(PIN_FRONT, INPUT);
+  pinMode(PIN_REAR, INPUT);
+
   for (;;) {
+    // esp_task_wdt_reset();
+    vTaskDelay(1 / portTICK_PERIOD_MS);
 
     if (!isShocked && digitalRead(PIN_SHOCK)) {
       Serial.println("SENSOR: Shock!");
@@ -241,67 +342,113 @@ void taskSensor(void* pvParameters) {
       Serial.println("SENSOR: Acc!");
     }
     isIgnition = !digitalRead(PIN_ACC);
+
+    if (!isFront && !digitalRead(PIN_FRONT)) {
+      Serial.println("SENSOR: Front!");
+    }
+    isFront = !digitalRead(PIN_FRONT);
+
+    if (!isRear && !digitalRead(PIN_REAR)) {
+      Serial.println("SENSOR: Rear!");
+    }
+    isRear = !digitalRead(PIN_REAR);
   }
 }
 
-void buzz() {
-  digitalWrite(PIN_BUZZER, HIGH);
-  vTaskDelay(50 / portTICK_PERIOD_MS);
+void taskUpload(void* pvParameters) {
+  for (;;) {
+    // esp_task_wdt_reset();
+    vTaskDelay(1 / portTICK_PERIOD_MS);
 
-  digitalWrite(PIN_BUZZER, LOW);
-  vTaskDelay(50 / portTICK_PERIOD_MS);
+    if (!isShocked) continue;
+
+    if (!isRear && !isFront) continue;
+
+    if (WiFi.status() != WL_CONNECTED) continue;
+
+    if (!Firebase.ready()) continue;
+
+    buzz(2);
+
+    Serial.println("FIREBASE: Uploading document!");
+
+    String documentPath_ID = "datas";
+    FirebaseJson content;
+
+    content.set("fields/mac/stringValue", MAC_ADDRESS);
+    content.set("fields/gpsTime/timestampValue", gpsTime);
+    content.set("fields/longitude/doubleValue", longitude);
+    content.set("fields/latitude/doubleValue", latitude);
+    content.set("fields/speed/doubleValue", speed);
+
+    content.set("fields/accelX/doubleValue", accelX);
+    content.set("fields/accelY/doubleValue", accelY);
+    content.set("fields/accelZ/doubleValue", accelZ);
+    content.set("fields/gyroX/doubleValue", gyroX);
+    content.set("fields/gyroY/doubleValue", gyroY);
+    content.set("fields/gyroZ/doubleValue", gyroZ);
+    content.set("fields/temperature/doubleValue", temperature);
+
+    content.set("fields/course/doubleValue", course);
+    content.set("fields/shock/booleanValue", isShocked);
+    content.set("fields/front/booleanValue", isFront);
+    content.set("fields/rear/booleanValue", isRear);
+    content.set("fields/satellite/integerValue", satellite);
+    content.set("fields/ignition/booleanValue", isIgnition);
+    content.set("fields/gpsFixed/booleanValue", isGpsFixed);
+    content.set("fields/orientation/stringValue", orientation);
+
+    bool result = Firebase.Firestore.createDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw());
+
+    if (result) {
+      Serial.println("FIREBASE: Document Added!");
+      buzz(2);
+    } else {
+      Serial.print("FIREBASE: Document Error!");
+      Serial.println(fbdo.errorReason());
+      buzz(3);
+    }
+
+
+    delay(3000);
+  }
 }
 
-void sendData() {
-  buzz();
-
-  if (WiFi.status() == WL_CONNECTED) return;
-
-  buzz();
-  String documentPath_ID = "datas";
-  FirebaseJson content;
-
-  content.set("fields/mac/stringValue", MAC_ADDRESS);
-  content.set("fields/date/timestampValue", date);
-  content.set("fields/longitude/doubleValue", longitude);
-  content.set("fields/latitude/doubleValue", latitude);
-  content.set("fields/speed/doubleValue", speed);
-  content.set("fields/course/doubleValue", course);
-  content.set("fields/shock/booleanValue", isShocked);
-  content.set("fields/satellite/integerValue", satellite);
-  content.set("fields/ignition/booleanValue", isIgnition);
-  content.set("fields/gpsFixed/booleanValue", isGpsFixed);
-
-  bool result = Firebase.Firestore.createDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw());
-
-  if (result) {
-    Serial.print("########################");
-    Serial.println("Added a new document!");
-  } else {
-    Serial.print("########################");
-    Serial.println("Error!");
-    Serial.println(fbdo.errorReason());
+void taskMpu6050(void* pvParameters) {
+  if (!mpu.begin()) {
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 
-  buzz();
-  buzz();
+  mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+  mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
 
-  delay(10000);
-  // esp_task_wdt_reset();
+  for (;;) {
+    // esp_task_wdt_reset();
+    vTaskDelay(500 / portTICK_PERIOD_MS);
+
+    sensors_event_t a, g, temp;
+    mpu.getEvent(&a, &g, &temp);
+
+    accelX = a.acceleration.x;
+    accelY = a.acceleration.y;
+    accelZ = a.acceleration.z;
+
+    gyroX = g.gyro.x;
+    gyroY = g.gyro.y;
+    gyroZ = g.gyro.z;
+
+    temperature = temp.temperature;
+  }
 }
 
+// Setup
+void setup() {
+  //for debugging
+  Serial.begin(9600);
 
+  watchdogInit();
+  taskInit();
+}
 
-
-// void loopTask1() {
-//   while (Serial2.available()) {
-//     parser.encode((char)Serial2.read());
-//   }
-
-
-
-//   if (isShocked) {
-//     sendData();
-//     isShocked = false;
-//   }
-// }
+void loop() {}

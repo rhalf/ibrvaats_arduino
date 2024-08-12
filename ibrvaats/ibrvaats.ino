@@ -261,6 +261,8 @@ void taskWifi(void* pvParameters) {
     Serial.println(WiFi.localIP());
 
     MAC_ADDRESS = WiFi.macAddress();
+
+    buzz(1);
   }
 }
 
@@ -290,6 +292,8 @@ void taskFirebase(void* pvParameters) {
     Firebase.reconnectWiFi(true);
 
     Serial.println("Connected to Firebase!");
+    buzz(1);
+
     attempt++;
   }
 }
@@ -314,9 +318,9 @@ void taskDisplay(void* pvParameters) {
       u8g2.setCursor(0, 40);
       u8g2.println("SPEED: " + String(speed));
       u8g2.setCursor(0, 50);
-      u8g2.println("SHOCK: " + String(isShocked) + ", " + String(isFront) + ":" + String(isRear));
+      u8g2.println("SHOCK: " + String(isShocked) + ", " + String(isFront) + ":" + String(isRear) + " | " + orientation);
       u8g2.setCursor(0, 60);
-      u8g2.println("ORIENTATION: " + String(orientation));
+      u8g2.println(String(accelX, 2) + " | " + String(accelY, 2) + " | " + String(accelZ, 2));
     } while (u8g2.nextPage());
   }
 }
@@ -364,6 +368,8 @@ void taskUpload(void* pvParameters) {
 
     if (!isRear && !isFront) continue;
 
+    if (speed < 0.2) continue;
+
     if (WiFi.status() != WL_CONNECTED) continue;
 
     if (!Firebase.ready()) continue;
@@ -396,7 +402,6 @@ void taskUpload(void* pvParameters) {
     content.set("fields/satellite/integerValue", satellite);
     content.set("fields/ignition/booleanValue", isIgnition);
     content.set("fields/gpsFixed/booleanValue", isGpsFixed);
-    content.set("fields/orientation/stringValue", orientation);
 
     bool result = Firebase.Firestore.createDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath_ID.c_str(), content.raw());
 
@@ -439,6 +444,22 @@ void taskMpu6050(void* pvParameters) {
     gyroZ = g.gyro.z;
 
     temperature = temp.temperature;
+
+    bool top = (accelX > -2.0 && accelX < 2.0) && (accelY > -2.0 && accelY < 2.0) && (accelZ > 8.0 && accelZ < 12.0);
+    bool bottom = (accelX > -3.0 && accelX < 3.0) && (accelY > -3.0 && accelY < 3.0) && (accelZ < -6.0 && accelZ > -12.0);
+    bool left = (accelX > -3.0 && accelX < 3.0) && (accelY > 6.0 && accelY < 12.0) && (accelZ > -3.0 && accelZ < 3.0);
+    bool right = (accelX > -3.0 && accelX < 3.0) && (accelY < -6.0 && accelY > -12.0) && (accelZ > -3.0 && accelZ < 3.0);
+    bool front = (accelX > 6.0 && accelX < 12.0) && (accelY > -3.0 && accelY < 3.0) && (accelZ > -3.0 && accelZ < 3.0);
+    bool rear = (accelX < -6.0 && accelX > -12.0) && (accelY > -23.0 && accelY < 3.0) && (accelZ > -3.0 && accelZ < 3.0);
+
+    if (top) orientation = "TOP";
+    if (bottom) orientation = "BOTTOM";
+    if (left) orientation = "LEFT";
+    if (right) orientation = "RIGHT";
+    if (front) orientation = "FRONT";
+    if (rear) orientation = "REAR";
+
+    // Serial.println("ORIENTATION: " + orientation);
   }
 }
 

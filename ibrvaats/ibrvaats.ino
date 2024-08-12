@@ -92,12 +92,12 @@ String PLATE_NUMER = "AAA1234";
 String orientation = "TOP";
 
 //====================================================================== Functions
-void buzz(uint8_t times = 1) {
+void buzz(uint8_t times = 1, uint16_t duration = 50) {
   for (uint8_t t = 0; t < times; t++) {
     digitalWrite(PIN_BUZZER, HIGH);
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    vTaskDelay(duration / portTICK_PERIOD_MS);
     digitalWrite(PIN_BUZZER, LOW);
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    vTaskDelay(duration / portTICK_PERIOD_MS);
   }
 }
 
@@ -248,9 +248,12 @@ void taskWifi(void* pvParameters) {
     // esp_task_wdt_reset();
     vTaskDelay(1000 / portTICK_PERIOD_MS);
 
+
     if (!WiFi.STA.started()) delay(500);
 
     if (WiFi.status() == WL_CONNECTED) continue;
+
+    buzz(1);
 
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -274,6 +277,7 @@ void taskFirebase(void* pvParameters) {
     // esp_task_wdt_reset();
     vTaskDelay(1 / portTICK_PERIOD_MS);
 
+
     if (WiFi.status() != WL_CONNECTED) continue;
 
     if (Firebase.ready()) continue;
@@ -281,6 +285,8 @@ void taskFirebase(void* pvParameters) {
     if (Firebase.isTokenExpired()) attempt = 0;
 
     if (attempt > 0) continue;
+
+    buzz(2);
 
     config.api_key = API_KEY;
     auth.user.email = USER_EMAIL;
@@ -291,8 +297,8 @@ void taskFirebase(void* pvParameters) {
     Firebase.begin(&config, &auth);
     Firebase.reconnectWiFi(true);
 
-    Serial.println("Connected to Firebase!");
-    buzz(1);
+    Serial.println("FIREBASE: Connected!");
+    buzz(2);
 
     attempt++;
   }
@@ -338,22 +344,22 @@ void taskSensor(void* pvParameters) {
     vTaskDelay(1 / portTICK_PERIOD_MS);
 
     if (!isShocked && digitalRead(PIN_SHOCK)) {
-      Serial.println("SENSOR: Shock!");
+      Serial.println("SHOCK SENSOR: Detected!");
     }
     isShocked = digitalRead(PIN_SHOCK);
 
     if (!isIgnition && !digitalRead(PIN_ACC)) {
-      Serial.println("SENSOR: Acc!");
+      Serial.println("ACC SENSOR: Detected!");
     }
     isIgnition = !digitalRead(PIN_ACC);
 
     if (!isFront && !digitalRead(PIN_FRONT)) {
-      Serial.println("SENSOR: Front!");
+      Serial.println("INFRARED SENSOR: Front!");
     }
     isFront = !digitalRead(PIN_FRONT);
 
     if (!isRear && !digitalRead(PIN_REAR)) {
-      Serial.println("SENSOR: Rear!");
+      Serial.println("INFRARED SENSOR: Rear!");
     }
     isRear = !digitalRead(PIN_REAR);
   }
@@ -368,13 +374,13 @@ void taskUpload(void* pvParameters) {
 
     if (!isRear && !isFront) continue;
 
-    if (speed < 0.2) continue;
+    // if (speed < 0.2) continue;
 
     if (WiFi.status() != WL_CONNECTED) continue;
 
     if (!Firebase.ready()) continue;
 
-    buzz(2);
+    buzz(3);
 
     Serial.println("FIREBASE: Uploading document!");
 
@@ -407,15 +413,14 @@ void taskUpload(void* pvParameters) {
 
     if (result) {
       Serial.println("FIREBASE: Document Added!");
-      buzz(2);
+      buzz(3);
     } else {
       Serial.print("FIREBASE: Document Error!");
       Serial.println(fbdo.errorReason());
-      buzz(3);
+      buzz(3, 100);
     }
 
-
-    delay(3000);
+    delay(2000);
   }
 }
 

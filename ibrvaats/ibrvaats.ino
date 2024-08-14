@@ -387,7 +387,8 @@ void taskUpload(void* pvParameters) {
     String documentPath_ID = "datas";
     FirebaseJson content;
 
-    content.set("fields/mac/stringValue", MAC_ADDRESS);
+    content.set("fields/plateNumber/stringValue", PLATE_NUMER);
+
     content.set("fields/gpsTime/timestampValue", gpsTime);
     content.set("fields/longitude/doubleValue", longitude);
     content.set("fields/latitude/doubleValue", latitude);

@@ -50,8 +50,11 @@ uint8_t GPS_RXD2 = 16;
 uint8_t GPS_TXD2 = 17;
 uint8_t PIN_SHOCK = 14;
 uint8_t PIN_ACC = 27;
-uint8_t PIN_FRONT = 33;
-uint8_t PIN_REAR = 25;
+
+uint8_t PIN_FRONT_TRIGGER = 33;
+uint8_t PIN_FRONT_ECHO = 33;
+uint8_t PIN_REAR_TRIGGER = 25;
+uint8_t PIN_REAR_ECHO = 25;
 
 const int PIN_BUZZER = 5;
 
@@ -111,6 +114,23 @@ String toTimestamp(int year, int month, int day, int hour, int minute, int secon
 }
 
 
+double getDistance(uint8_t trigger, uint8_t echo, uint8_t distance) {
+  digitalWrite(trigger, LOW);  //making sure the trigger is off.
+  delayMicroseconds(2);
+  digitalWrite(trigger, HIGH);  //create sound
+  delayMicroseconds(10);
+  digitalWrite(trigger, LOW);  //turn off
+
+  uint32_t time = pulseIn(echo, HIGH);  //count the time of echo.
+  // time = microseconds * 1000000
+  // 343 m/s speed of sound
+  double dura = (time / 2);
+  dura = dura / 1000000;
+  // s = d/t | d = st
+  double dist = 343 * dura;
+  dist = dist * 100;
+  return dist;
+}
 //====================================================================== GPS Datas
 void onRmcUpdate(nmea::RmcData const rmc) {
   if (rmc.is_valid) {
@@ -336,8 +356,11 @@ void taskSensor(void* pvParameters) {
   pinMode(PIN_SHOCK, INPUT);
   pinMode(PIN_ACC, INPUT);
   pinMode(PIN_BUZZER, OUTPUT);
-  pinMode(PIN_FRONT, INPUT);
-  pinMode(PIN_REAR, INPUT);
+  pinMode(PIN_FRONT_TRIGGER, OUTPUT);
+  pinMode(PIN_FRONT_ECHO, INPUT);
+  pinMode(PIN_REAR_TRIGGER, OUTPUT);
+  pinMode(PIN_REAR_ECHO, INPUT);
+
 
   for (;;) {
     // esp_task_wdt_reset();
@@ -348,20 +371,22 @@ void taskSensor(void* pvParameters) {
     }
     isShocked = digitalRead(PIN_SHOCK);
 
-    if (!isIgnition && !digitalRead(PIN_ACC)) {
-      Serial.println("ACC SENSOR: Detected!");
-    }
-    isIgnition = !digitalRead(PIN_ACC);
+    // if (!isIgnition && !digitalRead(PIN_ACC)) {
+    //   Serial.println("ACC SENSOR: Detected!");
+    // }
+    // isIgnition = !digitalRead(PIN_ACC);
 
-    if (!isFront && !digitalRead(PIN_FRONT)) {
-      Serial.println("INFRARED SENSOR: Front!");
+    double frontDistance = getDistance(PIN_FRONT_TRIGGER, PIN_FRONT_ECHO, 10);
+    if (!isFront && frontDistance < 10) {
+      Serial.println("ULTRASONIC SENSOR: Front!");
     }
-    isFront = !digitalRead(PIN_FRONT);
+    isFront = frontDistance < 10;
 
-    if (!isRear && !digitalRead(PIN_REAR)) {
-      Serial.println("INFRARED SENSOR: Rear!");
+    bool rearRear = getDistance(PIN_REAR_TRIGGER, PIN_REAR_ECHO, 10);
+    if (!isRear && rearRear < 10) {
+      Serial.println("ULTRASONIC SENSOR: Rear!");
     }
-    isRear = !digitalRead(PIN_REAR);
+    isRear = rearRear < 10;
   }
 }
 

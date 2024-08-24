@@ -49,12 +49,16 @@ u8g2(U8G2_R0, /*reset=*/U8X8_PIN_NONE, /*clock=*/SCL, /*data=*/SDA);
 uint8_t GPS_RXD2 = 16;
 uint8_t GPS_TXD2 = 17;
 uint8_t PIN_SHOCK = 14;
-uint8_t PIN_ACC = 27;
 
-uint8_t PIN_FRONT_TRIGGER = 33;
-uint8_t PIN_FRONT_ECHO = 33;
-uint8_t PIN_REAR_TRIGGER = 25;
-uint8_t PIN_REAR_ECHO = 25;
+
+uint8_t PIN_FRONT_TRIGGER = 25;
+uint8_t PIN_FRONT_ECHO = 26;
+uint8_t PIN_REAR_TRIGGER = 33;
+uint8_t PIN_REAR_ECHO = 27;
+
+uint32_t US_MINIMUM_RANGE = 1;
+uint32_t US_MAXIMUM_RANGE = 400;
+uint32_t US_TRIGGER_RANGE = 15;
 
 const int PIN_BUZZER = 5;
 
@@ -82,7 +86,10 @@ volatile double gyroZ = 0;
 volatile int satellite = 0;
 volatile bool isShocked = false;
 volatile bool isFront = false;
+volatile double isFrontDistance = 0;
 volatile bool isRear = false;
+volatile double isRearDistance = 0;
+
 volatile bool isConnected = false;
 volatile bool isGpsFixed = false;
 volatile bool isIgnition = false;
@@ -114,22 +121,20 @@ String toTimestamp(int year, int month, int day, int hour, int minute, int secon
 }
 
 
-double getDistance(uint8_t trigger, uint8_t echo, uint8_t distance) {
+double getDistance(uint8_t trigger, uint8_t echo) {
+
+  const double SOUND_SPEED = 0.034;
+  const double CM_TO_INCH = 0.393701;
+
   digitalWrite(trigger, LOW);  //making sure the trigger is off.
   delayMicroseconds(2);
   digitalWrite(trigger, HIGH);  //create sound
   delayMicroseconds(10);
   digitalWrite(trigger, LOW);  //turn off
 
-  uint32_t time = pulseIn(echo, HIGH);  //count the time of echo.
-  // time = microseconds * 1000000
-  // 343 m/s speed of sound
-  double dura = (time / 2);
-  dura = dura / 1000000;
-  // s = d/t | d = st
-  double dist = 343 * dura;
-  dist = dist * 100;
-  return dist;
+  uint32_t duration = pulseIn(echo, HIGH);  //count the time of echo.
+  double distance = duration * SOUND_SPEED / 2;
+  return distance;
 }
 //====================================================================== GPS Datas
 void onRmcUpdate(nmea::RmcData const rmc) {
@@ -342,9 +347,9 @@ void taskDisplay(void* pvParameters) {
       u8g2.setCursor(0, 30);
       u8g2.println("SAT : " + String(satellite) + ", " + String(isGpsFixed ? "Yes" : "No"));
       u8g2.setCursor(0, 40);
-      u8g2.println("SPEED: " + String(speed));
+      u8g2.println("SPEED: " + String(speed) + " | " + orientation);
       u8g2.setCursor(0, 50);
-      u8g2.println("SHOCK: " + String(isShocked) + ", " + String(isFront) + ":" + String(isRear) + " | " + orientation);
+      u8g2.println("SHOCK: " + String(isShocked) + ", " + String(isFrontDistance, 0) + ":" + String(isRearDistance, 0));
       u8g2.setCursor(0, 60);
       u8g2.println(String(accelX, 2) + " | " + String(accelY, 2) + " | " + String(accelZ, 2));
     } while (u8g2.nextPage());
@@ -354,7 +359,7 @@ void taskDisplay(void* pvParameters) {
 //taskSensor: Read Sensor then Firebase
 void taskSensor(void* pvParameters) {
   pinMode(PIN_SHOCK, INPUT);
-  pinMode(PIN_ACC, INPUT);
+
   pinMode(PIN_BUZZER, OUTPUT);
   pinMode(PIN_FRONT_TRIGGER, OUTPUT);
   pinMode(PIN_FRONT_ECHO, INPUT);
@@ -364,7 +369,7 @@ void taskSensor(void* pvParameters) {
 
   for (;;) {
     // esp_task_wdt_reset();
-    vTaskDelay(1 / portTICK_PERIOD_MS);
+    //vTaskDelay(1 / portTICK_PERIOD_MS);
 
     if (!isShocked && digitalRead(PIN_SHOCK)) {
       Serial.println("SHOCK SENSOR: Detected!");
@@ -376,17 +381,31 @@ void taskSensor(void* pvParameters) {
     // }
     // isIgnition = !digitalRead(PIN_ACC);
 
-    double frontDistance = getDistance(PIN_FRONT_TRIGGER, PIN_FRONT_ECHO, 10);
-    if (!isFront && frontDistance < 10) {
-      Serial.println("ULTRASONIC SENSOR: Front!");
-    }
-    isFront = frontDistance < 10;
 
-    bool rearRear = getDistance(PIN_REAR_TRIGGER, PIN_REAR_ECHO, 10);
-    if (!isRear && rearRear < 10) {
-      Serial.println("ULTRASONIC SENSOR: Rear!");
+   double frontDistance = getDistance(PIN_FRONT_TRIGGER, PIN_FRONT_ECHO);
+    if (frontDistance > US_MINIMUM_RANGE && frontDistance < US_MAXIMUM_RANGE) {
+      if (frontDistance < US_TRIGGER_RANGE) {
+        Serial.println("ULTRASONIC SENSOR: Front!");
+        isFront = true;
+      } else {
+        isFront = false;
+      }
+
+      isFrontDistance = frontDistance;
     }
-    isRear = rearRear < 10;
+
+    double rearDistance = getDistance(PIN_REAR_TRIGGER, PIN_REAR_ECHO);
+    if (rearDistance > US_MINIMUM_RANGE && rearDistance < US_MAXIMUM_RANGE) {
+      if (rearDistance < US_TRIGGER_RANGE ) {
+        Serial.println("ULTRASONIC SENSOR: Rear!");
+        isRear = true;
+      } else {
+        isRear = false;
+      }
+
+      isRearDistance = rearDistance;
+    }
+
   }
 }
 
